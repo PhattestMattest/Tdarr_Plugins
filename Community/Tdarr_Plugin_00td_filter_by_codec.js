@@ -1,5 +1,5 @@
 const details = () => ({
-  id: 'Tdarr_Plugin_Custom_Filter_All_Video_Codecs',
+  id: 'Tdarr_Plugin_00td_filter_by_codec',
   Stage: 'Pre-processing',
   Name: 'Filter by Codec (All Video Streams)',
   Type: 'Video',
