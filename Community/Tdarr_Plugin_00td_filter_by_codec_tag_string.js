@@ -1,11 +1,11 @@
 const details = () => ({
   id: 'Tdarr_Plugin_00td_filter_by_codec_tag_string',
   Stage: 'Pre-processing',
-  Name: 'Filter: Stream Order Matches Preferences',
+  Name: 'Filter: Stream Order Match (Ignore Missing)',
   Type: 'Video',
   Operation: 'Filter',
-  Description: `This filter checks if a file's stream order matches the specified order of codecs, channels, languages, and stream types. If the order is correct, it proceeds to Output 1. Otherwise, it goes to Output 2.`,
-  Version: '1.0',
+  Description: `Checks if stream order matches user-defined preferences (languages, codecs, channels, streamTypes), ignoring values that are not present in the file.`,
+  Version: '1.2',
   Tags: 'filter',
   Inputs: [
     {
@@ -24,7 +24,7 @@ const details = () => ({
       inputUI: {
         type: 'text',
       },
-      tooltip: `Comma-separated language priority list. Leave blank to disable.\nExample:\neng,fre`,
+      tooltip: `Comma-separated language priority list. Leave blank to disable.\nExample:\neng,jpn`,
     },
     {
       name: 'channels',
@@ -81,17 +81,28 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
   const originalStreams = JSON.stringify(streams);
 
   const sortStreams = (sortType) => {
-    const items = sortType.inputs.split(',').reverse();
+    const allItems = sortType.inputs.split(',').map((x) => x.trim()).filter((x) => x);
+    const existingItems = [];
+
+    for (const stream of streams) {
+      const value = String(sortType.getValue(stream));
+      if (allItems.includes(value) && !existingItems.includes(value)) {
+        existingItems.push(value);
+      }
+    }
+
+    const items = existingItems.reverse();
+
     for (const item of items) {
       const matched = [];
       for (let j = 0; j < streams.length; j++) {
-        const value = sortType.getValue(streams[j]);
-        if (String(value) === String(item)) {
+        const value = String(sortType.getValue(streams[j]));
+        if (value === item) {
           if (
             streams[j].codec_long_name?.includes('image') ||
             streams[j].codec_name?.includes('png')
           ) {
-            continue; // Skip image streams
+            continue;
           }
           matched.push(streams[j]);
           streams.splice(j, 1);
@@ -128,7 +139,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     },
   };
 
-  const orderList = processOrder.split(',');
+  const orderList = processOrder.split(',').map((x) => x.trim());
   for (const key of orderList) {
     if (sortTypes[key] && sortTypes[key].inputs) {
       sortStreams(sortTypes[key]);
@@ -138,10 +149,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
   const reordered = JSON.stringify(streams);
   if (reordered !== originalStreams) {
     response.filterReason = 'Streams do not match preferred order';
-    response.processFile = true; // Send to Output 2
+    response.processFile = true; // Output 2
   } else {
     response.filterReason = 'Streams already in preferred order';
-    response.processFile = false; // Send to Output 1
+    response.processFile = false; // Output 1
   }
 
   return response;
@@ -149,3 +160,4 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
 module.exports.details = details;
 module.exports.plugin = plugin;
+
