@@ -1,11 +1,12 @@
 const details = () => ({
-  id: 'Tdarr_Plugin_00td_filter_by_codec',
+  id: 'Tdarr_Plugin_Custom_Filter_All_Video_Codecs',
   Stage: 'Pre-processing',
-  Name: 'Filter By Codec',
+  Name: 'Filter by Codec (All Video Streams)',
   Type: 'Video',
   Operation: 'Filter',
-  Description: 'Only allow specified codecs to be processed \n\n',
-  Version: '1.00',
+  Description:
+    'Scans all video streams and only allows processing if specified codecs are present or absent.',
+  Version: '1.1',
   Tags: 'filter',
   Inputs: [
     {
@@ -16,7 +17,7 @@ const details = () => ({
         type: 'text',
       },
       tooltip:
-        'Enter a comma separated list of codecs to be processed. Leave blank if using codecsToNotProcess',
+        'Enter a comma-separated list of video codecs to process. Leave blank if using codecsToNotProcess.',
     },
     {
       name: 'codecsToNotProcess',
@@ -26,42 +27,61 @@ const details = () => ({
         type: 'text',
       },
       tooltip:
-        'Enter a comma separated list of codecs to be not be processed. Leave blank if using codecsToProcess',
+        'Enter a comma-separated list of video codecs to NOT process. Leave blank if using codecsToProcess.',
     },
   ],
 });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const plugin = (file, librarySettings, inputs, otherArguments) => {
   const lib = require('../methods/lib')();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
   inputs = lib.loadDefaultValues(inputs, details);
+
   const response = {
     processFile: false,
     infoLog: '',
   };
 
-  const fileCodec = file.video_codec_name !== '' ? file.video_codec_name : file.audio_codec_name;
+  const videoStreams = (file.ffProbeData?.streams || []).filter(
+    (s) => s.codec_type === 'video'
+  );
+
+  if (videoStreams.length === 0) {
+    response.infoLog += 'No video streams found.\n';
+    return response;
+  }
+
+  const streamCodecs = videoStreams.map((stream) =>
+    (stream.codec_name || '').toLowerCase()
+  );
 
   if (inputs.codecsToProcess !== '') {
-    const codecs = inputs.codecsToProcess.split(',');
-    if (codecs.includes(fileCodec)) {
+    const codecsToProcess = inputs.codecsToProcess
+      .split(',')
+      .map((c) => c.trim().toLowerCase());
+
+    const match = streamCodecs.some((c) => codecsToProcess.includes(c));
+
+    if (match) {
       response.processFile = true;
-      response.infoLog += 'File is in codecsToProcess. Moving to next plugin.';
+      response.infoLog += `At least one video stream matched codecsToProcess (${codecsToProcess.join(', ')}).\n`;
     } else {
-      response.processFile = false;
-      response.infoLog += 'File is not in codecsToProcess. Breaking out of plugin stack.';
+      response.infoLog += `No video streams matched codecsToProcess (${codecsToProcess.join(', ')}). Skipping file.\n`;
     }
   }
 
   if (inputs.codecsToNotProcess !== '') {
-    const codecs = inputs.codecsToNotProcess.split(',');
-    if (codecs.includes(fileCodec)) {
+    const codecsToNotProcess = inputs.codecsToNotProcess
+      .split(',')
+      .map((c) => c.trim().toLowerCase());
+
+    const match = streamCodecs.some((c) => codecsToNotProcess.includes(c));
+
+    if (match) {
       response.processFile = false;
-      response.infoLog += 'File is in codecsToNotProcess. Breaking out of plugin stack.';
+      response.infoLog += `At least one video stream matched codecsToNotProcess (${codecsToNotProcess.join(', ')}). Skipping file.\n`;
     } else {
       response.processFile = true;
-      response.infoLog += 'File is not in codecsToNotProcess. Moving to next plugin.';
+      response.infoLog += `No video streams matched codecsToNotProcess (${codecsToNotProcess.join(', ')}). Processing file.\n`;
     }
   }
 
