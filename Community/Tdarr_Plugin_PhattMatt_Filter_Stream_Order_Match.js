@@ -1,18 +1,18 @@
 const details = () => ({
   id: 'Tdarr_Plugin_PhattMatt_Filter_Stream_Order_Match',
   Stage: 'Pre-processing',
-  Name: 'Phatt Matt: Stream Order Match V1.9',
+  Name: 'Phatt Matt: Stream Order Match V2.0',
   Type: 'Filter',
   Operation: 'Filter',
   Description:
     'Checks that streams are ordered as video > audio (in specified language/channel order) > subtitles. Designed for runClassicFilterPlugin routing. Includes stream summary log.',
-  Version: '1.9',
+  Version: '2.0',
   Tags: 'pre-processing,filter,ffprobe,audio order,language order',
   Inputs: [
     {
       name: 'preferredAudioLanguages',
       type: 'string',
-      defaultValue: 'eng,jpn,chi',
+      defaultValue: 'eng,jpn',
       inputText: 'Preferred Audio Languages (comma-separated)',
       tooltip: 'Enter languages in preferred order. Example: eng,jpn,chi',
     },
@@ -60,9 +60,11 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     const channels = stream.channels || 0;
     const language = (stream.tags && stream.tags.language) ? stream.tags.language.toLowerCase() : 'und';
     const label = `${type}/${codec} lang=${language}${type === 'audio' ? ` ch=${channels}` : ''}`;
+
     if (type === 'video') videoStreams.push({ index, type, codec, channels, language });
     else if (type === 'audio') audioStreams.push({ index, type, codec, channels, language });
     else if (type === 'subtitle') subtitleStreams.push({ index, type, codec, channels, language });
+
     return { index, type, codec, channels, language, label };
   });
 
@@ -102,9 +104,28 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     }
   }
 
+  const channelPriority = [
+    2, 8, 7, 6, 5, 4, 3, 1
+  ];
+
+  function parseChannels(stream) {
+    const c = stream.channels;
+    if (typeof c === 'number') return c;
+    return Number(c) || 0;
+  }
+
+  function rank(stream) {
+    const ch = parseChannels(stream);
+
+    const idx = channelPriority.indexOf(ch);
+    if (idx !== -1) return idx;
+
+    return 999; // unmatched go last
+  }
+
   const expectedAudioOrder = [];
   for (const lang of preferredLangs) {
-    const sorted = grouped[lang].sort((a, b) => b.channels - a.channels);
+    const sorted = grouped[lang].sort((a, b) => rank(a) - rank(b));
     expectedAudioOrder.push(...sorted);
   }
   expectedAudioOrder.push(...undOrOther);
@@ -124,7 +145,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
   }
 
   return {
-    processFile: true, // ✅ This tells runClassicFilterPlugin to use Output 1 (left)
+    processFile: true,
     preset: '',
     container: '',
     infoLog: `PASS: Stream order valid. ${streamSummary}`,
