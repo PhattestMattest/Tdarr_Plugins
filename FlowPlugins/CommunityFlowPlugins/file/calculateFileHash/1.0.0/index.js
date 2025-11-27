@@ -37,38 +37,51 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.plugin = exports.details = void 0;
-var fs_1 = require("fs");
 var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
-    name: 'Transcode Video File',
-    description: 'Transcode a video file using ffmpeg. GPU transcoding will be used if possible.',
+    name: 'Calculate File Hash',
+    description: 'Calculate File Hash and place it in a variable',
     style: {
-        borderColor: '#6efefc',
-        opacity: 0.5,
+        borderColor: 'green',
     },
     tags: '',
     isStartPlugin: false,
     pType: '',
     requiresVersion: '2.11.01',
     sidebarPosition: -1,
-    icon: '',
+    icon: 'faHashtag',
     inputs: [
         {
-            label: 'Target Codec',
-            name: 'target_codec',
+            label: 'Algorithm',
+            name: 'algorithm',
             type: 'string',
-            defaultValue: 'hevc',
+            defaultValue: 'sha256',
             inputUI: {
                 type: 'dropdown',
-                options: [
-                    'hevc',
-                    // 'vp9',
-                    'h264',
-                    // 'vp8',
-                ],
+                options: ['md5', 'sha1', 'sha256', 'sha512'],
             },
-            tooltip: 'Specify the codec to use',
+            tooltip: 'Select the algorithm for the file hash.',
+        },
+        {
+            label: 'Absolute path to the file',
+            name: 'filePath',
+            type: 'string',
+            defaultValue: '{{{args.inputFileObj._id}}}',
+            inputUI: {
+                type: 'text',
+            },
+            tooltip: "Set the absolute path to the file to which the hash will be calculated. Variable templating is allowed.\n\n      https://docs.tdarr.io/docs/plugins/flow-plugins/basics#plugin-variable-templating\n\n      For Example,\n\n      Original file\n      {{{ args.originalLibraryFile._id }}}\n\n      Working file\n      {{{ args.inputFileObj._id }}}",
+        },
+        {
+            label: 'Variable',
+            name: 'variable',
+            type: 'string',
+            defaultValue: 'fileHash',
+            inputUI: {
+                type: 'text',
+            },
+            tooltip: "Variable to set.\n\n      Example\n      fileHash\n\n      You can then check this in the 'Check Flow Variable' plugin {{{args.variables.user.fileHash}}}\n      against another value such as {{{args.variables.user.otherFileHash}}}",
         },
     ],
     outputs: [
@@ -81,30 +94,39 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, oldFile, newFile;
+    var lib, algorithm, filePath, variable, hash, err_1, errorMessage;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
-                oldFile = args.inputFileObj._id;
-                newFile = "".concat(args.inputFileObj._id, ".tmp");
-                return [4 /*yield*/, (0, fileUtils_1.fileExists)(newFile)];
+                algorithm = String(args.inputs.algorithm).trim();
+                filePath = String(args.inputs.filePath).trim();
+                variable = String(args.inputs.variable).trim();
+                args.jobLog("Calculating the ".concat(algorithm, " hash of ").concat(filePath, " and recording it in ").concat(variable));
+                _a.label = 1;
             case 1:
-                if (!_a.sent()) return [3 /*break*/, 3];
-                return [4 /*yield*/, fs_1.promises.unlink(newFile)];
+                _a.trys.push([1, 3, , 4]);
+                return [4 /*yield*/, (0, fileUtils_1.hashFile)(filePath, algorithm)];
             case 2:
-                _a.sent();
-                _a.label = 3;
-            case 3: return [4 /*yield*/, fs_1.promises.copyFile(oldFile, newFile)];
-            case 4:
-                _a.sent();
+                hash = _a.sent();
+                if (!args.variables.user) {
+                    // eslint-disable-next-line no-param-reassign
+                    args.variables.user = {};
+                }
+                // eslint-disable-next-line no-param-reassign
+                args.variables.user[variable] = hash;
                 return [2 /*return*/, {
-                        outputFileObj: { _id: newFile },
+                        outputFileObj: args.inputFileObj,
                         outputNumber: 1,
                         variables: args.variables,
                     }];
+            case 3:
+                err_1 = _a.sent();
+                errorMessage = err_1.message;
+                throw new Error("Error calculating file hash: ".concat(errorMessage));
+            case 4: return [2 /*return*/];
         }
     });
 }); };
